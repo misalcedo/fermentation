@@ -4,7 +4,6 @@ use std::time::{Duration, Instant};
 use std::collections::HashMap;
 use std::hash::Hash;
 
-mod counter;
 mod decay;
 mod forward;
 
