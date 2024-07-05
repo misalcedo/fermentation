@@ -1,12 +1,5 @@
 use std::time::{Duration, Instant};
 
-/// A decay function takes some information about the ith item, and returns a weight for this item.
-/// It can depend on a variety of properties of the item such as ti, vi as well as the current time t,
-/// but for brevity we will write it simply as w(i, t), or just w(i) when t is implicit.
-/// We define a function w(i, t) to be a decay function if it satisfies the following properties:
-/// 1. w(i, t) = 1 when ti = t and 0 ≤ w(i, t) ≤ 1 for all t ≥ ti.
-/// 2. w is monotone non-increasing as time increases: t' ≥ t ⇒ w(i, t') ≤ w(i, t).
-
 pub trait Item {
     fn timestamp(&self) -> Instant;
 }
@@ -17,6 +10,12 @@ impl Item for Instant {
     }
 }
 
+/// A decay function takes some information about the ith item, and returns a weight for this item.
+/// It can depend on a variety of properties of the item such as ti, vi as well as the current time t,
+/// but for brevity we will write it simply as w(i, t), or just w(i) when t is implicit.
+/// We define a function w(i, t) to be a decay function if it satisfies the following properties:
+/// 1. w(i, t) = 1 when ti = t and 0 ≤ w(i, t) ≤ 1 for all t ≥ ti.
+/// 2. w is monotone non-increasing as time increases: t' ≥ t ⇒ w(i, t') ≤ w(i, t).
 pub trait DecayFunction {
     fn weight<I>(&self, item: I, timestamp: Instant) -> f64
     where
@@ -39,6 +38,11 @@ where
     }
 }
 
+/// The forward decay is computed on the amount of time between the arrival of an item and a fixed point L,
+/// known as the landmark. By convention, this landmark is some time earlier than all other items;
+/// we discuss how this landmark can be chosen below.
+/// Thus, we are looking forward in time from the landmark to see the item,
+/// instead of looking backward from the current time.
 pub struct ForwardDecay<G> {
     landmark: Instant,
     g: G,
