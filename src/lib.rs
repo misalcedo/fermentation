@@ -43,7 +43,7 @@ impl Item for Instant {
 ///
 /// ```rust
 /// use std::time::{Duration, Instant};
-/// use ferment::ForwardDecay;
+/// use fermentation::ForwardDecay;
 ///
 /// let landmark = Instant::now();
 /// let fd = ForwardDecay::new(Instant::now(), |_| 1.0);
@@ -58,7 +58,7 @@ impl Item for Instant {
 ///
 /// ```rust
 /// use std::time::{Duration, Instant};
-/// use ferment::ForwardDecay;
+/// use fermentation::ForwardDecay;
 ///
 /// let beta = 2;
 /// let landmark = Instant::now();
@@ -75,7 +75,7 @@ impl Item for Instant {
 ///
 /// ```rust
 /// use std::time::{Duration, Instant};
-/// use ferment::ForwardDecay;
+/// use fermentation::ForwardDecay;
 ///
 /// let alpha = 0.2;
 /// let landmark = Instant::now();
@@ -91,7 +91,7 @@ impl Item for Instant {
 ///
 /// ```rust
 /// use std::time::{Duration, Instant};
-/// use ferment::ForwardDecay;
+/// use fermentation::ForwardDecay;
 ///
 /// let beta = 2;
 /// let landmark = Instant::now();
