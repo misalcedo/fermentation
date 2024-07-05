@@ -3,6 +3,8 @@
 
 use std::time::{Duration, Instant};
 
+mod aggregate;
+
 /// An item in a stream of inputs.
 pub trait Item {
     /// The arrival timestamp for this item.
@@ -10,6 +12,9 @@ pub trait Item {
 
     /// The age in seconds (including fractional time) for this item.
     fn age(&self, landmark: Instant) -> f64;
+
+    /// The value associated with this item.
+    fn value(&self) -> f64;
 }
 
 impl Item for Instant {
@@ -22,6 +27,39 @@ impl Item for Instant {
             .as_ref()
             .map(Duration::as_secs_f64)
             .unwrap_or_else(|| -1.0 * landmark.duration_since(*self).as_secs_f64())
+    }
+
+    fn value(&self) -> f64 {
+        f64::NAN
+    }
+}
+
+
+impl Item for (Instant, f64) {
+    fn timestamp(&self) -> Instant {
+        self.0
+    }
+
+    fn age(&self, landmark: Instant) -> f64 {
+        self.0.age(landmark)
+    }
+
+    fn value(&self) -> f64 {
+        self.1
+    }
+}
+
+impl<I> Item for &I where I: Item {
+    fn timestamp(&self) -> Instant {
+        (*self).timestamp()
+    }
+
+    fn age(&self, landmark: Instant) -> f64 {
+        (*self).age(landmark)
+    }
+
+    fn value(&self) -> f64 {
+        (*self).value()
     }
 }
 
@@ -144,10 +182,19 @@ where
         (self.g)(item.age(self.landmark))
     }
 
+    /// The weighted value of the item without the normalizing factor of 1 / g(t - L).
+    /// Has the property of remaining constant for a given item when the landmark remains constant.
+    pub fn raw_weighted_value<I>(&self, item: I) -> f64
+    where
+        I: Item,
+    {
+        (self.g)(item.age(self.landmark)) * item.value()
+    }
+
     /// In order to normalize values given that the function value increases with time,
     /// we typically need to include a normalizing factor in terms of g(t),
     /// the function of the current time.
-    pub fn normalizing_factor<I>(&self, timestamp: Instant) -> f64
+    pub fn normalizing_factor(&self, timestamp: Instant) -> f64
     {
         (self.g)(timestamp.age(self.landmark))
     }
@@ -161,7 +208,7 @@ mod tests {
     fn example() {
         let landmark = Instant::now();
         let stream = vec![5, 7, 3, 8, 4];
-        let fd = ForwardDecay::new(landmark, |n: f64| n * n);
+        let fd = ForwardDecay::new(landmark, |n: f64| n.powi(2));
         let now = landmark + Duration::from_secs(10);
 
         let result: Vec<f64> = stream.into_iter()
