@@ -134,6 +134,23 @@ where
     {
         (self.g)(item.age(self.landmark)) / (self.g)(timestamp.age(self.landmark))
     }
+
+    /// The weight of an item without the normalizing factor of 1 / g(t - L).
+    /// Has the property of remaining constant for a given item when the landmark remains constant.
+    pub fn raw_weight<I>(&self, item: I) -> f64
+    where
+        I: Item,
+    {
+        (self.g)(item.age(self.landmark))
+    }
+
+    /// In order to normalize values given that the function value increases with time,
+    /// we typically need to include a normalizing factor in terms of g(t),
+    /// the function of the current time.
+    pub fn normalizing_factor<I>(&self, timestamp: Instant) -> f64
+    {
+        (self.g)(timestamp.age(self.landmark))
+    }
 }
 
 #[cfg(test)]
