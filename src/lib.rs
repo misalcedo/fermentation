@@ -4,9 +4,11 @@
 use std::time::{Duration, Instant};
 
 /// An item in a stream of inputs.
-/// [Item]s are associated with an arrival timestamp ti.
 pub trait Item {
+    /// The arrival timestamp for this item.
     fn timestamp(&self) -> Instant;
+
+    /// The age in seconds (including fractional time) for this item.
     fn age(&self, landmark: Instant) -> f64;
 }
 
@@ -110,6 +112,7 @@ impl<G> ForwardDecay<G>
 where
     G: Fn(f64) -> f64,
 {
+    /// Create a new instance with a positive monotone non-decreasing function and a landmark time.
     pub fn new(landmark: Instant, g: G) -> Self {
         Self {
             landmark,
@@ -117,6 +120,7 @@ where
         }
     }
 
+    /// Update the landmark to the given timestamp.
     pub fn set_landmark(&mut self, landmark: Instant) {
         self.landmark = landmark;
     }
@@ -150,6 +154,16 @@ mod tests {
         let weights = vec![0.25, 0.49, 0.09, 0.64, 0.16];
 
         assert_eq!(result, weights);
+    }
+
+    #[test]
+    fn age() {
+        let landmark = Instant::now();
+
+        assert_eq!((landmark - Duration::from_secs(1)).age(landmark), -1.0);
+        assert_eq!(landmark.age(landmark), 0.0);
+        assert_eq!((landmark + Duration::from_secs(5)).age(landmark), 5.0);
+        assert_eq!((landmark + Duration::from_secs(10)).age(landmark), 10.0);
     }
 }
 
