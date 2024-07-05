@@ -1,160 +1,134 @@
-use std::cmp::Ordering;
-use std::collections::{BinaryHeap, HashSet, VecDeque};
+//! An implementation of Forward Decay to enable various aggregations over stream of items.
+//! http://dimacs.rutgers.edu/~graham/pubs/papers/fwddecay.pdf
+
 use std::time::{Duration, Instant};
-use std::collections::HashMap;
-use std::hash::Hash;
 
-mod decay;
-
-/// http://dimacs.rutgers.edu/~graham/pubs/papers/fwddecay.pdf
-/// https://pdfs.semanticscholar.org/bb07/cb2360590fd788f5ee3739567f36080d350b.pdf
-/// http://datagenetics.com/blog/november22019/index.html
-trait Decay {
-    fn exponential_weight(&self) -> f64;
+/// An item in a stream of inputs.
+/// [Item]s are associated with an arrival timestamp ti.
+pub trait Item {
+    fn timestamp(&self) -> Instant;
+    fn age(&self, landmark: Instant) -> f64;
 }
 
-impl Decay for Duration {
-    fn exponential_weight(&self) -> f64 {
-        self.as_secs_f64().exponential_weight()
+impl Item for Instant {
+    fn timestamp(&self) -> Instant {
+        *self
+    }
+
+    fn age(&self, landmark: Instant) -> f64 {
+        self.checked_duration_since(landmark)
+            .as_ref()
+            .map(Duration::as_secs_f64)
+            .unwrap_or_else(|| -1.0 * landmark.duration_since(*self).as_secs_f64())
     }
 }
 
-impl Decay for f64 {
-    fn exponential_weight(&self) -> f64 {
-        1.0 / 2.0f64.powf(*self)
-    }
-}
-
-struct Record<K> {
-    key: K,
-    value: f64,
-    weight: f64,
-}
-
-impl<K> Record<K> {
-    pub fn now(key: K, value: f64, weight: f64) -> Self {
-        Self {
-            key,
-            value,
-            weight,
-        }
-    }
-}
-
-struct HeavyHitter<K> {
-    key: K,
-    ratio: f64,
-}
-
-impl<K> HeavyHitter<K> {
-    pub fn new(key: K, ratio: f64) -> Self {
-        Self {
-            key,
-            ratio
-        }
-    }
-}
-
-impl<K> PartialEq for HeavyHitter<K> {
-    fn eq(&self, other: &Self) -> bool {
-        self.ratio == other.ratio
-    }
-}
-
-impl<K> Eq for HeavyHitter<K> {}
-
-impl<K> Ord for HeavyHitter<K> {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.ratio.partial_cmp(&other.ratio).unwrap_or(Ordering::Equal)
-    }
-}
-
-impl<K> PartialOrd for HeavyHitter<K> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.ratio.partial_cmp(&other.ratio)
-    }
-}
-
-pub struct ForwardDecayTracker<K> {
+/// A decay function takes some information about the ith item, and returns a weight for this item.
+/// It can depend on a variety of properties of the item such as ti, vi as well as the current time t,
+/// but for brevity we will write it simply as w(i, t), or just w(i) when t is implicit.
+/// We define a function w(i, t) to be a decay function if it satisfies the following properties:
+/// 1. w(i, t) = 1 when ti = t and 0 ≤ w(i, t) ≤ 1 for all t ≥ ti.
+/// 2. w is monotone non-increasing as time increases: t' ≥ t ⇒ w(i, t') ≤ w(i, t).
+///
+/// The forward decay is computed on the amount of time between the arrival of an item and a fixed point L,
+/// known as the landmark. By convention, this landmark is some time earlier than all other items;
+/// we discuss how this landmark can be chosen below.
+/// Thus, we are looking forward in time from the landmark to see the item,
+/// instead of looking backward from the current time.
+///
+/// ## Examples
+///
+/// ### No decay
+/// g(n) = 1 for all n.
+///
+/// ```rust
+/// use std::time::{Duration, Instant};
+/// use ferment::ForwardDecay;
+///
+/// let landmark = Instant::now();
+/// let fd = ForwardDecay::new(Instant::now(), |_| 1.0);
+///
+/// let weight = fd.weight(landmark + Duration::from_secs(5), landmark + Duration::from_secs(10));
+///
+/// assert_eq!(weight, 1.0);
+/// ```
+///
+/// ### Polynomial decay
+/// g(n) = n ^ β for some parameter β > 0
+///
+/// ```rust
+/// use std::time::{Duration, Instant};
+/// use ferment::ForwardDecay;
+///
+/// let beta = 2;
+/// let landmark = Instant::now();
+/// let fd = ForwardDecay::new(Instant::now(), |n| n.powi(beta));
+///
+/// let weight = fd.weight(landmark + Duration::from_secs(5), landmark + Duration::from_secs(10));
+/// let result = format!("{weight:.8}");
+///
+/// assert!(vec!["0.24999999", "0.25000000"].contains(&result.as_str()));
+/// ```
+///
+/// ### Exponential decay
+/// g(n) = exp(αn) for parameter α>0.
+///
+/// ```rust
+/// use std::time::{Duration, Instant};
+/// use ferment::ForwardDecay;
+///
+/// let alpha = 0.2;
+/// let landmark = Instant::now();
+/// let fd = ForwardDecay::new(landmark, |n| (alpha * n).exp());
+///
+/// let weight = fd.weight(landmark + Duration::from_secs(5), landmark + Duration::from_secs(10));
+///
+/// assert_eq!(weight, 0.3678794411714423);
+/// ```
+///
+/// ### Landmark Window
+/// g(n) = 1 for n > 0, and 0 otherwise.
+///
+/// ```rust
+/// use std::time::{Duration, Instant};
+/// use ferment::ForwardDecay;
+///
+/// let beta = 2;
+/// let landmark = Instant::now();
+/// let fd = ForwardDecay::new(landmark, |n| if n > 0.0 { 1.0 } else { 0.0 });
+///
+/// let weight = fd.weight(landmark + Duration::from_secs(5), landmark + Duration::from_secs(10));
+///
+/// assert_eq!(weight, 1.0);
+/// ```
+pub struct ForwardDecay<G> {
     landmark: Instant,
-    events: VecDeque<Record<K>>,
+    g: G,
 }
 
-impl<K> ForwardDecayTracker<K> where K: Hash + Eq + Clone {
-    pub fn now() -> Self {
+impl<G> ForwardDecay<G>
+where
+    G: Fn(f64) -> f64,
+{
+    pub fn new(landmark: Instant, g: G) -> Self {
         Self {
-            landmark: Instant::now(),
-            events: VecDeque::new(),
+            landmark,
+            g,
         }
     }
 
-    pub fn update(&mut self, key: K, value: f64) {
-        let weight = Instant::now().duration_since(self.landmark).exponential_weight();
-        self.events.push_back(Record::now(key, value, weight));
+    pub fn set_landmark(&mut self, landmark: Instant) {
+        self.landmark = landmark;
     }
 
-    pub fn query(&self, threshold: f64) -> Vec<K> {
-        let mut heap = BinaryHeap::new();
-        let mut seen = HashSet::new();
-
-        for record in self.events.iter() {
-            if !seen.insert(&record.key) {
-                continue;
-            }
-
-            let count: f64 = self.events.iter().filter(|r| r.key == record.key).map(|r| r.value).sum();
-            let ratio = count / self.events.len() as f64;
-
-            if ratio >= threshold {
-                heap.push(HeavyHitter::new(record.key.clone(), ratio));
-            }
-        }
-
-        let mut keys = Vec::with_capacity(heap.len());
-
-        while let Some(hh) = heap.pop() {
-            keys.push(hh.key);
-        }
-
-        keys
-    }
-}
-
-
-
-struct NaiveHeavyHitters {
-    counts: HashMap<String, f64>,
-}
-
-impl NaiveHeavyHitters {
-    fn new() -> Self {
-        Self {
-            counts: HashMap::new(),
-        }
-    }
-}
-
-impl NaiveHeavyHitters {
-    fn update(&mut self, item: &str) {
-        let count = self.counts.entry(item.to_string()).or_insert(0.0);
-        *count += 1.0;
-    }
-
-    fn query(&self, threshold: f64) -> Vec<String> {
-        let mut items: Vec<(&String, &f64)> = self.counts.iter().collect();
-        items.sort_by(|(_, a), (_, b)| b.partial_cmp(a).unwrap());
-
-        let mut heavy_hitters = Vec::new();
-        let mut total_count = 0.0;
-        for (item, count) in items {
-            total_count += count;
-            if *count >= threshold * total_count {
-                heavy_hitters.push(item.clone());
-            } else {
-                break;
-            }
-        }
-        heavy_hitters
+    /// Given a positive monotone non-decreasing function g, and a landmark time L,
+    /// the decayed weight of an item with arrival time ti > L measured at time t ≥ ti
+    /// is given by w(i, t) = g(ti − L) / g(t − L).
+    pub fn weight<I>(&self, item: I, timestamp: Instant) -> f64
+    where
+        I: Item,
+    {
+        (self.g)(item.age(self.landmark)) / (self.g)(timestamp.age(self.landmark))
     }
 }
 
@@ -163,50 +137,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn decay() {
-        assert_eq!(Duration::from_secs_f64(0.0).exponential_weight(), 1.0);
-        assert_eq!(Duration::from_secs_f64(1.0).exponential_weight(), 0.5);
-        assert_eq!(Duration::from_secs_f64(2.0).exponential_weight(), 0.25);
-        assert_eq!(Duration::from_secs_f64(3.0).exponential_weight(), 0.125);
-        assert_eq!(Duration::from_secs_f64(4.0).exponential_weight(), 0.0625);
-    }
+    fn example() {
+        let landmark = Instant::now();
+        let stream = vec![5, 7, 3, 8, 4];
+        let fd = ForwardDecay::new(landmark, |n: f64| n * n);
+        let now = landmark + Duration::from_secs(10);
 
-    #[test]
-    fn sample() {
-        let mut hh = ForwardDecayTracker::now();
-        hh.update("apple", 1.0);
-        hh.update("apple", 1.0);
-        hh.update("banana", 1.0);
-        hh.update("orange", 1.0);
-        hh.update("orange", 1.0);
-        hh.update("orange", 1.0);
+        let result: Vec<f64> = stream.into_iter()
+            .map(|i| landmark + Duration::from_secs(i))
+            .map(|i| fd.weight(i, now))
+            .collect();
+        let weights = vec![0.25, 0.49, 0.09, 0.64, 0.16];
 
-        assert_eq!(hh.query(0.5), vec!["orange"]);
-        assert_eq!(hh.query(0.333), vec!["orange", "apple"]);
-        assert_eq!(hh.query(0.166), vec!["orange", "apple", "banana"]);
-    }
-
-    #[test]
-    fn naive_sample() {
-        let mut hh = NaiveHeavyHitters::new();
-        hh.update("apple");
-        hh.update("apple");
-        hh.update("banana");
-        hh.update("orange");
-        hh.update("orange");
-        hh.update("orange");
-
-        assert_eq!(hh.query(0.5), vec!["orange"]);
-        assert_eq!(hh.query(0.333), vec!["orange", "apple"]);
-        assert_eq!(hh.query(0.166), vec!["orange", "apple", "banana"]);
-    }
-
-
-    #[test]
-    fn exponential_decay() {
-        let t = Duration::from_secs_f64(1.0);
-        let now = Duration::from_secs_f64(2.0);
-
-        assert_eq!(t.exponential_weight() / now.exponential_weight(), (t.as_secs_f64() - now.as_secs_f64()).exponential_weight());
+        assert_eq!(result, weights);
     }
 }
+
