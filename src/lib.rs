@@ -5,7 +5,6 @@ use std::collections::HashMap;
 use std::hash::Hash;
 
 mod decay;
-mod forward;
 
 /// http://dimacs.rutgers.edu/~graham/pubs/papers/fwddecay.pdf
 /// https://pdfs.semanticscholar.org/bb07/cb2360590fd788f5ee3739567f36080d350b.pdf
