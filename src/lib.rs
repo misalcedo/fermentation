@@ -4,8 +4,10 @@
 use std::time::{Duration, Instant};
 
 mod aggregate;
+pub mod g;
 
-pub use aggregate::AggregateComputation;
+pub use aggregate::ArithmeticAggregation;
+use crate::g::Function;
 
 /// An item in a stream of inputs.
 pub trait Item {
@@ -106,169 +108,6 @@ where
 /// (and then use this new L' at query time).
 /// This can be done with a linear
 /// pass over whatever data structure is being used.
-///
-/// ## Examples
-///
-/// ### No decay
-/// g(n) = 1 for all n.
-///
-/// ```rust
-/// use std::time::{Duration, Instant};
-/// use fermentation::ForwardDecay;
-///
-/// let landmark = Instant::now();
-/// let fd = ForwardDecay::new(Instant::now(), |_| 1.0);
-///
-/// let weight = fd.weight(landmark + Duration::from_secs(5), landmark + Duration::from_secs(10));
-///
-/// assert_eq!(weight, 1.0);
-/// ```
-///
-/// ### Polynomial decay
-/// g(n) = n ^ β for some parameter β > 0
-///
-/// ```rust
-/// use std::time::{Duration, Instant};
-/// use fermentation::ForwardDecay;
-///
-/// let beta = 2;
-/// let landmark = Instant::now();
-/// let fd = ForwardDecay::new(Instant::now(), |n| n.powi(beta));
-///
-/// let weight = fd.weight(landmark + Duration::from_secs(5), landmark + Duration::from_secs(10));
-/// let expected = 0.25;
-/// let epsilon = 0.00001;
-///
-/// assert!(weight >= (expected - epsilon) && weight <= (expected + epsilon));
-/// ```
-///
-/// ### Exponential decay
-/// g(n) = exp(αn) for parameter α>0.
-///
-/// ```rust
-/// use std::time::{Duration, Instant};
-/// use fermentation::ForwardDecay;
-///
-/// let alpha = 0.2;
-/// let landmark = Instant::now();
-/// let fd = ForwardDecay::new(landmark, |n| (alpha * n).exp());
-///
-/// let weight = fd.weight(landmark + Duration::from_secs(5), landmark + Duration::from_secs(10));
-///
-/// assert_eq!(weight, 0.3678794411714423);
-/// ```
-///
-/// ### Landmark Window
-/// g(n) = 1 for n > 0, and 0 otherwise.
-///
-/// ```rust
-/// use std::time::{Duration, Instant};
-/// use fermentation::ForwardDecay;
-///
-/// let beta = 2;
-/// let landmark = Instant::now();
-/// let  item = landmark + Duration::from_secs(5);
-/// let  now = landmark + Duration::from_secs(10);
-///
-/// let mut fd = ForwardDecay::new(landmark, |n| if n > 0.0 { 1.0 } else { 0.0 });
-///
-/// assert_eq!(fd.weight(item, now), 1.0);
-///
-/// fd.set_landmark(item + Duration::from_secs(1));
-///
-/// assert_ne!(fd.landmark(), landmark);
-/// assert_eq!(fd.weight(item, now), 0.0);
-/// ```
-///
-/// ### Aggregate Computations
-/// ```rust
-/// use std::time::{Duration, Instant};
-/// use fermentation::{AggregateComputation, ForwardDecay};
-///
-/// let landmark = Instant::now();
-/// let stream = vec![(5, 4.0), (7, 8.0), (3, 3.0), (8, 6.0), (4, 4.0)];
-/// let fd = ForwardDecay::new(landmark, |n: f64| n.powi(2));
-/// let now = landmark + Duration::from_secs(10);
-///
-/// let mut sum = fd.sum();
-/// let mut count = fd.count();
-/// let mut average = fd.average();
-/// let mut min = fd.min();
-/// let mut max = fd.max();
-///
-/// stream.into_iter()
-///     .map(|(offset, value)| (landmark + Duration::from_secs(offset), value))
-///     .for_each(|item| {
-///         sum.update(&item);
-///         count.update(&item);
-///         average.update(&item);
-///         min.update(&item);
-///         max.update(&item);
-///     });
-///
-/// let epsilon = 0.01;
-///
-/// assert_eq!(sum.query(now), 9.67);
-/// assert_eq!(count.query(now), 1.63);
-/// assert!(average.query(now) >= (5.93 - epsilon) && average.query(now) <= (5.93 + epsilon));
-/// assert_eq!(min.query(now), Some(3.0 * 0.09));
-/// assert_eq!(max.query(now), Some(8.0 * 0.49));
-/// ```
-///
-/// ### Changing Landmark with Exponential Decay
-/// ```rust
-/// use std::time::{Duration, Instant};
-/// use fermentation::{AggregateComputation, ForwardDecay, Item};
-///
-/// let landmark = Instant::now();
-/// let new_landmark = landmark + Duration::from_secs(1);
-/// let age = new_landmark.age(landmark);
-/// let stream = vec![(5, 4.0), (7, 8.0), (3, 3.0), (8, 6.0), (4, 4.0)];
-/// let now = landmark + Duration::from_secs(10);
-/// let alpha = 0.1;
-///
-/// let mut fd = ForwardDecay::new(landmark, |n: f64| (alpha * n).exp());
-///
-/// let (scaled_sum, scaled_count, scaled_average) = {
-///     let mut sum = fd.sum();
-///     let mut count = fd.count();
-///     let mut average = fd.average();
-///
-///     stream.iter()
-///         .map(|(offset, value)| (landmark + Duration::from_secs(*offset), *value))
-///         .for_each(|item| {
-///             sum.update(&item);
-///             count.update(&item);
-///             average.update(&item);
-///         });
-///
-///     sum.scale(fd.g()(-age));
-///     count.scale(fd.g()(-age));
-///     average.scale(fd.g()(-age));
-///
-///     (sum.query(now), count.query(now), average.query(now))
-/// };
-///
-/// let actual_age = fd.set_landmark(new_landmark);
-///
-/// assert_eq!(age, actual_age);
-///
-/// let mut sum = fd.sum();
-/// let mut count = fd.count();
-/// let mut average = fd.average();
-///
-/// stream.into_iter()
-///     .map(|(offset, value)| (landmark + Duration::from_secs(offset), value))
-///     .for_each(|item| {
-///         sum.update(&item);
-///         count.update(&item);
-///         average.update(&item);
-///     });
-///
-/// assert_eq!(scaled_sum, sum.query(now));
-/// assert_eq!(scaled_count, count.query(now));
-/// assert_eq!(scaled_average, average.query(now));
-/// ```
 pub struct ForwardDecay<G> {
     landmark: Instant,
     g: G,
@@ -276,7 +115,7 @@ pub struct ForwardDecay<G> {
 
 impl<G> ForwardDecay<G>
 where
-    G: Fn(f64) -> f64,
+    G: Function,
 {
     /// Create a new instance with a positive monotone non-decreasing function and a landmark time.
     pub fn new(landmark: Instant, g: G) -> Self {
@@ -311,7 +150,7 @@ where
     where
         I: Item,
     {
-        (self.g)(item.age(self.landmark)) / (self.g)(timestamp.age(self.landmark))
+        self.g.invoke(item.age(self.landmark)) / self.g.invoke(timestamp.age(self.landmark))
     }
 
     /// The weight of an item without the normalizing factor of 1 / g(t - L).
@@ -320,7 +159,7 @@ where
     where
         I: Item,
     {
-        (self.g)(item.age(self.landmark))
+        self.g.invoke(item.age(self.landmark))
     }
 
     /// The weighted value of the item without the normalizing factor of 1 / g(t - L).
@@ -329,7 +168,7 @@ where
     where
         I: Item,
     {
-        (self.g)(item.age(self.landmark)) * item.value()
+        self.g.invoke(item.age(self.landmark)) * item.value()
     }
 
     /// In order to normalize values given that the function value increases with time,
@@ -337,42 +176,14 @@ where
     /// the function of the current time.
     pub fn normalizing_factor(&self, timestamp: Instant) -> f64
     {
-        (self.g)(timestamp.age(self.landmark))
+        self.g.invoke(timestamp.age(self.landmark))
     }
 
-    pub fn sum<I>(&self) -> aggregate::Sum<'_, G, I>
+    pub fn aggregate<I>(self) -> ArithmeticAggregation<G, I>
     where
         I: Item,
     {
-        aggregate::Sum::<'_, G, I>::new(self)
-    }
-
-    pub fn count<I>(&self) -> aggregate::Count<'_, G, I>
-    where
-        I: Item,
-    {
-        aggregate::Count::<'_, G, I>::new(self)
-    }
-
-    pub fn average<I>(&self) -> aggregate::Average<'_, G, I>
-    where
-        I: Item,
-    {
-        aggregate::Average::<'_, G, I>::new(self)
-    }
-
-    pub fn min<I>(&self) -> aggregate::Min<'_, G, I>
-    where
-        I: Item + Clone,
-    {
-        aggregate::Min::<'_, G, I>::new(self)
-    }
-
-    pub fn max<I>(&self) -> aggregate::Max<'_, G, I>
-    where
-        I: Item + Clone,
-    {
-        aggregate::Max::<'_, G, I>::new(self)
+        ArithmeticAggregation::<G, I>::new(self)
     }
 }
 
@@ -384,7 +195,7 @@ mod tests {
     fn example() {
         let landmark = Instant::now();
         let stream = vec![5, 7, 3, 8, 4];
-        let fd = ForwardDecay::new(landmark, |n: f64| n.powi(2));
+        let fd = ForwardDecay::new(landmark, g::Polynomial::new(2));
         let now = landmark + Duration::from_secs(10);
 
         let result: Vec<f64> = stream.into_iter()
@@ -402,17 +213,16 @@ mod tests {
         let tick = Duration::from_secs(1);
         let new_landmark = landmark + tick;
         let stream = vec![5, 7, 3, 8, 4];
-        let now = landmark + Duration::from_secs(10);
         let alpha = 1.0;
 
-        let mut fd = ForwardDecay::new(landmark, |n: f64| (alpha * n).exp());
+        let mut fd = ForwardDecay::new(landmark, g::Exponential::new(alpha));
 
         let previous_weights: Vec<f64> = stream.iter()
             .map(|i| landmark + Duration::from_secs(*i))
             .map(|i| fd.static_weight(i))
             .collect();
         let age = fd.set_landmark(new_landmark);
-        let factor = fd.g()(-age);
+        let factor = fd.g().invoke(-age);
         let new_weights: Vec<f64> = stream.iter()
             .map(|i| landmark + Duration::from_secs(*i))
             .map(|i| fd.static_weight(i))
