@@ -81,6 +81,32 @@ where
 /// Thus, we are looking forward in time from the landmark to see the item,
 /// instead of looking backward from the current time.
 ///
+/// ## Numerical Issues
+/// A common feature of the above techniques—indeed,
+/// the key technique that allows us to track the decayed weights
+/// efficiently—is that they maintain counts and other quantities
+/// based on g(ti − L), and only scale by g(t − L) at query time.
+/// But while g(ti−L)/g(t−L) is guaranteed to lie between zero
+/// and one, the intermediate values of g(ti − L) could become
+/// very large.
+///
+/// For polynomial functions, these values should
+/// not grow too large, and should be effectively represented in
+/// practice by floating point values without loss of precision. For
+/// exponential functions, these values could grow quite large as
+/// new values of (ti − L) become large, and potentially exceed
+/// the capacity of common floating point types. However, since
+/// the values stored by the algorithms are linear combinations
+/// of g values (scaled sums), they can be rescaled relative to a
+/// new landmark. That is, by the analysis of exponential decay,
+/// the choice of L does not affect the final result.
+/// We can therefore multiply each value based on L by a factor
+/// of exp(−α(L' − L)), and obtain the correct value as if we
+/// had instead computed relative to a new landmark L'
+/// (and then use this new L' at query time).
+/// This can be done with a linear
+/// pass over whatever data structure is being used.
+///
 /// ## Examples
 ///
 /// ### No decay
@@ -188,6 +214,61 @@ where
 /// assert_eq!(min.query(now), Some(3.0 * 0.09));
 /// assert_eq!(max.query(now), Some(8.0 * 0.49));
 /// ```
+///
+/// ### Changing Landmark with Exponential Decay
+/// ```rust
+/// use std::time::{Duration, Instant};
+/// use fermentation::{AggregateComputation, ForwardDecay, Item};
+///
+/// let landmark = Instant::now();
+/// let new_landmark = landmark + Duration::from_secs(1);
+/// let age = new_landmark.age(landmark);
+/// let stream = vec![(5, 4.0), (7, 8.0), (3, 3.0), (8, 6.0), (4, 4.0)];
+/// let now = landmark + Duration::from_secs(10);
+/// let alpha = 0.1;
+///
+/// let mut fd = ForwardDecay::new(landmark, |n: f64| (alpha * n).exp());
+///
+/// let (scaled_sum, scaled_count, scaled_average) = {
+///     let mut sum = fd.sum();
+///     let mut count = fd.count();
+///     let mut average = fd.average();
+///
+///     stream.iter()
+///         .map(|(offset, value)| (landmark + Duration::from_secs(*offset), *value))
+///         .for_each(|item| {
+///             sum.update(&item);
+///             count.update(&item);
+///             average.update(&item);
+///         });
+///
+///     sum.scale(fd.g()(-age));
+///     count.scale(fd.g()(-age));
+///     average.scale(fd.g()(-age));
+///
+///     (sum.query(now), count.query(now), average.query(now))
+/// };
+///
+/// let actual_age = fd.set_landmark(new_landmark);
+///
+/// assert_eq!(age, actual_age);
+///
+/// let mut sum = fd.sum();
+/// let mut count = fd.count();
+/// let mut average = fd.average();
+///
+/// stream.into_iter()
+///     .map(|(offset, value)| (landmark + Duration::from_secs(offset), value))
+///     .for_each(|item| {
+///         sum.update(&item);
+///         count.update(&item);
+///         average.update(&item);
+///     });
+///
+/// assert_eq!(scaled_sum, sum.query(now), "sum");
+/// assert_eq!(scaled_count, count.query(now), "count");
+/// assert_eq!(scaled_average, average.query(now), "avg");
+/// ```
 pub struct ForwardDecay<G> {
     landmark: Instant,
     g: G,
@@ -205,14 +286,22 @@ where
         }
     }
 
+    /// The function g for this decay model.
+    pub fn g(&self) -> &G {
+        &self.g
+    }
+
     /// The landmark for this decay model.
-    pub fn landmark(&mut self) -> Instant {
+    pub fn landmark(&self) -> Instant {
         self.landmark
     }
 
     /// Update the landmark to the given timestamp.
-    pub fn set_landmark(&mut self, landmark: Instant) {
+    /// Returns the age of the new landmark relative to the previous landmark.
+    pub fn set_landmark(&mut self, landmark: Instant) -> f64 {
+        let age = landmark.age(self.landmark);
         self.landmark = landmark;
+        age
     }
 
     /// Given a positive monotone non-decreasing function g, and a landmark time L,
@@ -305,6 +394,35 @@ mod tests {
         let weights = vec![0.25, 0.49, 0.09, 0.64, 0.16];
 
         assert_eq!(result, weights);
+    }
+
+    #[test]
+    fn scaled_exponential() {
+        let landmark = Instant::now();
+        let tick = Duration::from_secs(1);
+        let new_landmark = landmark + tick;
+        let stream = vec![5, 7, 3, 8, 4];
+        let now = landmark + Duration::from_secs(10);
+        let alpha = 1.0;
+
+        let mut fd = ForwardDecay::new(landmark, |n: f64| (alpha * n).exp());
+
+        let previous_weights: Vec<f64> = stream.iter()
+            .map(|i| landmark + Duration::from_secs(*i))
+            .map(|i| fd.static_weight(i))
+            .collect();
+        let age = fd.set_landmark(new_landmark);
+        let factor = fd.g()(-age);
+        let new_weights: Vec<f64> = stream.iter()
+            .map(|i| landmark + Duration::from_secs(*i))
+            .map(|i| fd.static_weight(i))
+            .collect();
+
+        let factors: Vec<f64> = new_weights.iter().zip(previous_weights).map(|(a, b)| ((a / b) - factor).abs()).collect();
+        let epsilon = 0.001;
+
+        assert_eq!(age, tick.as_secs_f64());
+        assert!(factors.iter().all(|d| *d < epsilon));
     }
 
     #[test]

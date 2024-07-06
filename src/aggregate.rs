@@ -34,6 +34,10 @@ where
             _phantom: Default::default(),
         }
     }
+
+    pub fn scale(&mut self, factor: f64) {
+        self.total *= factor;
+    }
 }
 
 impl<'a, G, I> AggregateComputation for Sum<'a, G, I>
@@ -45,7 +49,7 @@ where
     type Output = f64;
 
     fn update(&mut self, item: &Self::Item) {
-        self.total += self.decay.static_weight(item) * item.value();
+        self.total += self.decay.static_weighted_value(item);
     }
 
     fn query(&self, timestamp: Instant) -> Self::Output {
@@ -70,6 +74,10 @@ where
             total: 0.0,
             _phantom: Default::default(),
         }
+    }
+
+    pub fn scale(&mut self, factor: f64) {
+        self.total *= factor;
     }
 }
 
@@ -109,6 +117,11 @@ where
             count: 0.0,
             _phantom: Default::default(),
         }
+    }
+
+    pub fn scale(&mut self, factor: f64) {
+        self.sum *= factor;
+        self.count *= factor;
     }
 }
 
