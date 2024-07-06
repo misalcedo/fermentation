@@ -5,6 +5,8 @@ use std::time::{Duration, Instant};
 
 mod aggregate;
 
+pub use aggregate::AggregateComputation;
+
 /// An item in a stream of inputs.
 pub trait Item {
     /// The arrival timestamp for this item.
@@ -49,7 +51,10 @@ impl Item for (Instant, f64) {
     }
 }
 
-impl<I> Item for &I where I: Item {
+impl<I> Item for &I
+where
+    I: Item,
+{
     fn timestamp(&self) -> Instant {
         (*self).timestamp()
     }
@@ -105,9 +110,10 @@ impl<I> Item for &I where I: Item {
 /// let fd = ForwardDecay::new(Instant::now(), |n| n.powi(beta));
 ///
 /// let weight = fd.weight(landmark + Duration::from_secs(5), landmark + Duration::from_secs(10));
-/// let result = format!("{weight:.8}");
+/// let expected = 0.25;
+/// let epsilon = 0.00001;
 ///
-/// assert!(vec!["0.24999999", "0.25000000"].contains(&result.as_str()));
+/// assert!(weight >= (expected - epsilon) && weight <= (expected + epsilon));
 /// ```
 ///
 /// ### Exponential decay
@@ -140,6 +146,41 @@ impl<I> Item for &I where I: Item {
 /// let weight = fd.weight(landmark + Duration::from_secs(5), landmark + Duration::from_secs(10));
 ///
 /// assert_eq!(weight, 1.0);
+/// ```
+///
+/// ### Aggregate Computations
+/// ```rust
+/// use std::time::{Duration, Instant};
+/// use fermentation::{AggregateComputation, ForwardDecay};
+///
+/// let landmark = Instant::now();
+/// let stream = vec![(5, 4.0), (7, 8.0), (3, 3.0), (8, 6.0), (4, 4.0)];
+/// let fd = ForwardDecay::new(landmark, |n: f64| n.powi(2));
+/// let now = landmark + Duration::from_secs(10);
+///
+/// let mut sum = fd.sum();
+/// let mut count = fd.count();
+/// let mut average = fd.average();
+/// let mut min = fd.min();
+/// let mut max = fd.max();
+///
+/// stream.into_iter()
+///     .map(|(offset, value)| (landmark + Duration::from_secs(offset), value))
+///     .for_each(|item| {
+///         sum.update(&item);
+///         count.update(&item);
+///         average.update(&item);
+///         min.update(&item);
+///         max.update(&item);
+///     });
+///
+/// let epsilon = 0.01;
+///
+/// assert_eq!(sum.query(now), 9.67);
+/// assert_eq!(count.query(now), 1.63);
+/// assert!(average.query(now) >= (5.93 - epsilon) && average.query(now) <= (5.93 + epsilon));
+/// assert_eq!(min.query(now), Some(3.0 * 0.09));
+/// assert_eq!(max.query(now), Some(8.0 * 0.49));
 /// ```
 pub struct ForwardDecay<G> {
     landmark: Instant,
@@ -202,6 +243,41 @@ where
     pub fn normalizing_factor(&self, timestamp: Instant) -> f64
     {
         (self.g)(timestamp.age(self.landmark))
+    }
+
+    pub fn sum<I>(&self) -> aggregate::Sum<'_, G, I>
+    where
+        I: Item,
+    {
+        aggregate::Sum::<'_, G, I>::new(self)
+    }
+
+    pub fn count<I>(&self) -> aggregate::Count<'_, G, I>
+    where
+        I: Item,
+    {
+        aggregate::Count::<'_, G, I>::new(self)
+    }
+
+    pub fn average<I>(&self) -> aggregate::Average<'_, G, I>
+    where
+        I: Item,
+    {
+        aggregate::Average::<'_, G, I>::new(self)
+    }
+
+    pub fn min<I>(&self) -> aggregate::Min<'_, G, I>
+    where
+        I: Item + Clone,
+    {
+        aggregate::Min::<'_, G, I>::new(self)
+    }
+
+    pub fn max<I>(&self) -> aggregate::Max<'_, G, I>
+    where
+        I: Item + Clone,
+    {
+        aggregate::Max::<'_, G, I>::new(self)
     }
 }
 
