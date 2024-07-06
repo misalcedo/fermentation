@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use crate::{ForwardDecay, Item};
-use crate::g::Function;
+use crate::g::{Exponential, Function};
 
 enum MinMax<I> {
     Min(I),
@@ -39,6 +39,32 @@ pub struct ArithmeticAggregation<G, I> {
     sum: f64,
     count: f64,
     min_max: Option<MinMax<I>>,
+}
+
+impl<I> ArithmeticAggregation<Exponential, I>
+where
+    I: Item,
+{
+    pub fn update_landmark(&mut self, landmark: Instant) {
+        let age = self.decay.set_landmark(landmark);
+        let factor = self.decay.g().invoke(age);
+
+        self.sum /= factor;
+        self.count /= factor;
+    }
+}
+
+impl<G, I> ArithmeticAggregation<G, I>
+where
+    G: Function,
+    I: Item,
+{
+    pub fn reset(&mut self, landmark: Instant) {
+        self.decay.set_landmark(landmark);
+        self.sum = 0.0;
+        self.count = 0.0;
+        self.min_max = None;
+    }
 }
 
 impl<G, I> ArithmeticAggregation<G, I>
@@ -102,10 +128,6 @@ where
 
     fn decay(&mut self) -> &ForwardDecay<G> {
         &self.decay
-    }
-
-    fn decay_mut(&mut self) -> &mut ForwardDecay<G> {
-        &mut self.decay
     }
 }
 
