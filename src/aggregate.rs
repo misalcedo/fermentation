@@ -45,7 +45,7 @@ where
     type Output = f64;
 
     fn update(&mut self, item: &Self::Item) {
-        self.total += self.decay.raw_weight(&item) * item.value();
+        self.total += self.decay.static_weight(&item) * item.value();
     }
 
     fn query(&self, timestamp: Instant) -> Self::Output {
@@ -82,7 +82,7 @@ where
     type Output = f64;
 
     fn update(&mut self, item: &Self::Item) {
-        self.total += self.decay.raw_weight(item);
+        self.total += self.decay.static_weight(item);
     }
 
     fn query(&self, timestamp: Instant) -> Self::Output {
@@ -121,10 +121,10 @@ where
     type Output = f64;
 
     fn update(&mut self, item: &Self::Item) {
-        let raw_weight = self.decay.raw_weight(&item);
+        let static_weight = self.decay.static_weight(&item);
 
-        self.sum += raw_weight * item.value();
-        self.count += raw_weight;
+        self.sum += static_weight * item.value();
+        self.count += static_weight;
     }
 
     fn query(&self, _: Instant) -> Self::Output {
@@ -161,7 +161,7 @@ where
     fn update(&mut self, other: &Self::Item) {
         self.item = match self.item.take() {
             None => Some(other.clone()),
-            Some(item) if self.decay.raw_weighted_value(&item) > self.decay.raw_weighted_value(other) => Some(other.clone()),
+            Some(item) if self.decay.static_weighted_value(&item) > self.decay.static_weighted_value(other) => Some(other.clone()),
             item => item
         }
     }
@@ -201,7 +201,7 @@ where
     fn update(&mut self, other: &Self::Item) {
         self.item = match self.item.take() {
             None => Some(other.clone()),
-            Some(item) if self.decay.raw_weighted_value(&item) < self.decay.raw_weighted_value(other) => Some(other.clone()),
+            Some(item) if self.decay.static_weighted_value(&item) < self.decay.static_weighted_value(other) => Some(other.clone()),
             item => item
         }
     }

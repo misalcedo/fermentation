@@ -158,6 +158,11 @@ where
         }
     }
 
+    /// The landmark for this decay model.
+    pub fn landmark(&mut self) -> Instant {
+        self.landmark
+    }
+
     /// Update the landmark to the given timestamp.
     pub fn set_landmark(&mut self, landmark: Instant) {
         self.landmark = landmark;
@@ -175,7 +180,7 @@ where
 
     /// The weight of an item without the normalizing factor of 1 / g(t - L).
     /// Has the property of remaining constant for a given item when the landmark remains constant.
-    pub fn raw_weight<I>(&self, item: I) -> f64
+    pub fn static_weight<I>(&self, item: I) -> f64
     where
         I: Item,
     {
@@ -184,7 +189,7 @@ where
 
     /// The weighted value of the item without the normalizing factor of 1 / g(t - L).
     /// Has the property of remaining constant for a given item when the landmark remains constant.
-    pub fn raw_weighted_value<I>(&self, item: I) -> f64
+    pub fn static_weighted_value<I>(&self, item: I) -> f64
     where
         I: Item,
     {
