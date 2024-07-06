@@ -3,7 +3,7 @@ name = "fermentation"
 description = "The good kind of decay; forward decay."
 version = "0.2.0"
 edition = "2021"
-license-file = "LICENSE"
+license = "Apache-2.0"
 repository = "https://github.com/misalcedo/fermentation"
 
 [dependencies]
