@@ -35,6 +35,8 @@ where
         }
     }
 
+    // TODO: Need to figure out how to scale then update the landmark.
+    // Otherwise, the normalizing factor will be for the old landmark and use the wrong age.
     pub fn scale(&mut self, factor: f64) {
         self.total *= factor;
     }

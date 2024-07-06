@@ -265,9 +265,9 @@ where
 ///         average.update(&item);
 ///     });
 ///
-/// assert_eq!(scaled_sum, sum.query(now), "sum");
-/// assert_eq!(scaled_count, count.query(now), "count");
-/// assert_eq!(scaled_average, average.query(now), "avg");
+/// assert_eq!(scaled_sum, sum.query(now));
+/// assert_eq!(scaled_count, count.query(now));
+/// assert_eq!(scaled_average, average.query(now));
 /// ```
 pub struct ForwardDecay<G> {
     landmark: Instant,
