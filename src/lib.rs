@@ -141,11 +141,17 @@ where
 ///
 /// let beta = 2;
 /// let landmark = Instant::now();
-/// let fd = ForwardDecay::new(landmark, |n| if n > 0.0 { 1.0 } else { 0.0 });
+/// let  item = landmark + Duration::from_secs(5);
+/// let  now = landmark + Duration::from_secs(10);
 ///
-/// let weight = fd.weight(landmark + Duration::from_secs(5), landmark + Duration::from_secs(10));
+/// let mut fd = ForwardDecay::new(landmark, |n| if n > 0.0 { 1.0 } else { 0.0 });
 ///
-/// assert_eq!(weight, 1.0);
+/// assert_eq!(fd.weight(item, now), 1.0);
+///
+/// fd.set_landmark(item + Duration::from_secs(1));
+///
+/// assert_ne!(fd.landmark(), landmark);
+/// assert_eq!(fd.weight(item, now), 0.0);
 /// ```
 ///
 /// ### Aggregate Computations

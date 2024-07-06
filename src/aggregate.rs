@@ -45,7 +45,7 @@ where
     type Output = f64;
 
     fn update(&mut self, item: &Self::Item) {
-        self.total += self.decay.static_weight(&item) * item.value();
+        self.total += self.decay.static_weight(item) * item.value();
     }
 
     fn query(&self, timestamp: Instant) -> Self::Output {
@@ -121,7 +121,7 @@ where
     type Output = f64;
 
     fn update(&mut self, item: &Self::Item) {
-        let static_weight = self.decay.static_weight(&item);
+        let static_weight = self.decay.static_weight(item);
 
         self.sum += static_weight * item.value();
         self.count += static_weight;
