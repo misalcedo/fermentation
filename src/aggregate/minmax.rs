@@ -1,7 +1,8 @@
 use std::mem;
 use std::time::Instant;
 
-use crate::{Aggregator, ForwardDecay, Item};
+use crate::{ForwardDecay, Item};
+use crate::aggregate::Aggregator;
 use crate::g::Function;
 
 #[derive(Default)]
@@ -35,7 +36,8 @@ impl<I> MinMax<I> {
 /// ## Example
 /// ```rust
 /// use std::time::{Duration, Instant};
-/// use fermentation::{aggregate::MinMaxAggregator, Aggregator, ForwardDecay, g};
+/// use fermentation::{ForwardDecay, g};
+/// use fermentation::aggregate::{MinMaxAggregator, Aggregator};
 ///
 /// let decay = ForwardDecay::new(Instant::now(), g::Polynomial::new(2));
 /// let landmark = decay.landmark();

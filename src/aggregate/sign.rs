@@ -1,6 +1,6 @@
 use std::time::Instant;
-use crate::{Aggregator, ForwardDecay, Item};
-use crate::aggregate::BasicAggregator;
+use crate::{ForwardDecay, Item};
+use crate::aggregate::{Aggregator, BasicAggregator};
 use crate::g::{Exponential, Function};
 
 /// A composite aggregator that uses a separate [BasicAggregator] for positive and negative values.
@@ -9,7 +9,8 @@ use crate::g::{Exponential, Function};
 /// ### Decayed Error Percentage
 /// ```rust
 /// use std::time::{Duration, Instant};
-/// use fermentation::{aggregate::SignAggregator, Aggregator, ForwardDecay, g};
+/// use fermentation::{ForwardDecay, g};
+/// use fermentation::aggregate::{SignAggregator, Aggregator};
 ///
 /// let decay = ForwardDecay::new(Instant::now(), g::Polynomial::new(2));
 /// let landmark = decay.landmark();
@@ -53,8 +54,8 @@ use crate::g::{Exponential, Function};
 /// ### Update Landmark
 /// ```rust
 /// use std::time::{Duration, Instant};
-/// use fermentation::{aggregate::BasicAggregator, Aggregator, ForwardDecay, g};
-/// use fermentation::aggregate::SignAggregator;
+/// use fermentation::{ForwardDecay, g};
+/// use fermentation::aggregate::{SignAggregator, Aggregator};
 ///
 /// let decay = ForwardDecay::new(Instant::now(), g::Exponential::new(0.2));
 /// let landmark = decay.landmark();

@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 use std::time::Instant;
-use crate::{Aggregator, ForwardDecay, Item};
+use crate::{ForwardDecay, Item};
+use crate::aggregate::Aggregator;
 use crate::g::{Exponential, Function};
 
 /// Decayed aggregate sum, count and average over a stream of items.
@@ -9,7 +10,8 @@ use crate::g::{Exponential, Function};
 /// ### Basic Aggregation
 /// ```rust
 /// use std::time::{Duration, Instant};
-/// use fermentation::{aggregate::BasicAggregator, Aggregator, ForwardDecay, g};
+/// use fermentation::{ForwardDecay, g};
+/// use fermentation::aggregate::{BasicAggregator, Aggregator};
 ///
 /// let decay = ForwardDecay::new(Instant::now(), g::Polynomial::new(2));
 /// let landmark = decay.landmark();
@@ -38,7 +40,8 @@ use crate::g::{Exponential, Function};
 /// ### Update Landmark
 /// ```rust
 /// use std::time::{Duration, Instant};
-/// use fermentation::{aggregate::BasicAggregator, Aggregator, ForwardDecay, g};
+/// use fermentation::{ForwardDecay, g};
+/// use fermentation::aggregate::{BasicAggregator, Aggregator};
 ///
 /// let decay = ForwardDecay::new(Instant::now(), g::Exponential::new(0.2));
 /// let landmark = decay.landmark();
