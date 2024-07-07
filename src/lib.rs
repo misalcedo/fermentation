@@ -1,7 +1,7 @@
 //! An implementation of Forward Decay to enable various aggregations over stream of items.
 //! See [the research paper](http://dimacs.rutgers.edu/~graham/pubs/papers/fwddecay.pdf) for more details on forward decay.
 
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 mod aggregate;
 pub mod g;
@@ -130,6 +130,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
     use super::*;
 
     #[test]

@@ -1,11 +1,13 @@
+use std::mem;
 use std::time::Instant;
 
 use crate::{ForwardDecay, Item};
 use crate::g::{Exponential, Function};
 
+#[derive(Default)]
 enum MinMax<I> {
-    Min(I),
-    Max(I),
+    #[default]
+    Neither,
     Same(I),
     Both(I, I)
 }
@@ -13,8 +15,7 @@ enum MinMax<I> {
 impl<I> MinMax<I> {
     fn min(&self) -> Option<&I> {
         match self {
-            MinMax::Min(min) => Some(min),
-            MinMax::Max(_) => None,
+            MinMax::Neither => None,
             MinMax::Same(min_max) => Some(min_max),
             MinMax::Both(min, _) => Some(min)
         }
@@ -22,8 +23,7 @@ impl<I> MinMax<I> {
 
     fn max(&self) -> Option<&I> {
         match self {
-            MinMax::Min(_) => None,
-            MinMax::Max(max) => Some(max),
+            MinMax::Neither => None,
             MinMax::Same(min_max) => Some(min_max),
             MinMax::Both(_, max) => Some(max)
         }
@@ -38,7 +38,7 @@ pub struct ArithmeticAggregation<G, I> {
     decay: ForwardDecay<G>,
     sum: f64,
     count: f64,
-    min_max: Option<MinMax<I>>,
+    min_max: MinMax<I>,
 }
 
 impl<I> ArithmeticAggregation<Exponential, I>
@@ -59,75 +59,78 @@ where
     G: Function,
     I: Item,
 {
-    pub fn reset(&mut self, landmark: Instant) {
-        self.decay.set_landmark(landmark);
-        self.sum = 0.0;
-        self.count = 0.0;
-        self.min_max = None;
-    }
-}
-
-impl<G, I> ArithmeticAggregation<G, I>
-where
-    G: Function,
-    I: Item,
-{
     pub fn new(decay: ForwardDecay<G>) -> Self {
         Self {
             decay,
             sum: 0.0,
             count: 0.0,
-            min_max: None,
+            min_max: MinMax::Neither,
         }
     }
 
-    pub fn scale(&mut self, factor: f64) {
-        self.sum *= factor;
-        self.count *= factor;
-    }
-
-    fn update(&mut self, item: I) {
+    pub fn update(&mut self, item: I) {
         let static_weight = self.decay.static_weight(&item);
 
         self.sum += static_weight * item.value();
         self.count += static_weight;
 
-        // self.min_max = match self.min_max.take() {
-        //     None => Some(item),
-        //     Some(MinMax::Min(min)) if self.decay.static_weighted_value(&item) > self.decay.static_weighted_value(&item) => Some(item),
-        //     item => item
-        // };
+        self.min_max = match mem::take(&mut self.min_max) {
+            MinMax::Neither => MinMax::Same(item),
+            MinMax::Same(min_max) => {
+                let min_max_static_weight = self.decay.static_weighted_value(&min_max);
+                let item_static_weight = self.decay.static_weighted_value(&item);
 
-        // TODO: when min and max are the same only max should be set.
-        // self.max = match self.max.take() {
-        //     None => Some(item),
-        //     Some(item) if self.decay.static_weighted_value(&item) < self.decay.static_weighted_value(&item) => Some(item),
-        //     item => item
-        // };
+                if min_max_static_weight <= item_static_weight {
+                    MinMax::Both(min_max, item)
+                } else {
+                    MinMax::Both(item, min_max)
+                }
+            }
+            MinMax::Both(min, max) => {
+                let min_static_weight = self.decay.static_weighted_value(&min);
+                let max_static_weight = self.decay.static_weighted_value(&max);
+                let item_static_weight = self.decay.static_weighted_value(&item);
+
+                if item_static_weight < min_static_weight {
+                    MinMax::Both(item, max)
+                } else if item_static_weight > max_static_weight {
+                    MinMax::Both(min, item)
+                } else {
+                    MinMax::Both(min, max)
+                }
+            }
+        }
     }
 
-    fn sum(&self, timestamp: Instant) -> f64 {
+    pub fn sum(&self, timestamp: Instant) -> f64 {
         self.sum / self.decay.normalizing_factor(timestamp)
     }
 
-    fn count(&self, timestamp: Instant) -> f64 {
+    pub fn count(&self, timestamp: Instant) -> f64 {
         self.count / self.decay.normalizing_factor(timestamp)
     }
 
-    fn average(&self) -> f64 {
+    pub fn average(&self) -> f64 {
         self.sum / self.count
     }
 
-    fn min(&self) -> Option<&I> {
-        self.min_max.as_ref()?.min()
+    pub fn min(&self) -> Option<&I> {
+        self.min_max.min()
     }
 
-    fn max(&self) -> Option<&I> {
-        self.min_max.as_ref()?.max()
+    pub fn max(&self) -> Option<&I> {
+        self.min_max.max()
     }
 
-    fn decay(&mut self) -> &ForwardDecay<G> {
+    pub fn decay(&mut self) -> &ForwardDecay<G> {
         &self.decay
+    }
+
+    pub fn reset(&mut self, landmark: Instant) {
+        self.decay.set_landmark(landmark);
+        self.sum = 0.0;
+        self.count = 0.0;
+        self.min_max = MinMax::Neither;
     }
 }
 

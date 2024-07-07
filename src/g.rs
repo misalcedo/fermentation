@@ -53,8 +53,14 @@ impl Function for LandmarkWindow {
 pub struct Custom<F>(F);
 
 impl<F> From<F> for Custom<F> where F: Fn(f64) -> f64 {
-    fn from(value: F) -> Self {
-        Self(value)
+    fn from(f: F) -> Self {
+        Self(f)
+    }
+}
+
+impl<F> Custom<F> where F: Fn(f64) -> f64 {
+    pub fn new(f: F) -> Self {
+        Self(f)
     }
 }
 
