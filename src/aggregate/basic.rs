@@ -3,10 +3,73 @@ use std::time::Instant;
 use crate::{Aggregator, ForwardDecay, Item};
 use crate::g::{Exponential, Function};
 
-/// A decay function in either the forward or backward setting assigns a weight to each item in the
-/// input (and the value of this weight can vary over time).
-/// Aggregate computations over such data must now use these weights to scale the contribution
-/// of each item. In most cases, this leads to a natural weighted generalization of the aggregate.
+/// Decayed aggregate sum, count and average over a stream of items.
+///
+/// ## Examples
+/// ### Basic Aggregation
+/// ```rust
+/// use std::time::{Duration, Instant};
+/// use fermentation::{aggregate::BasicAggregator, Aggregator, ForwardDecay, g};
+///
+/// let decay = ForwardDecay::new(Instant::now(), g::Polynomial::new(2));
+/// let landmark = decay.landmark();
+/// let now = landmark + Duration::from_secs(10);
+/// let stream = vec![
+///     (landmark + Duration::from_secs(5), 4.0),
+///     (landmark + Duration::from_secs(7), 8.0),
+///     (landmark + Duration::from_secs(3), 3.0),
+///     (landmark + Duration::from_secs(8), 6.0),
+///     (landmark + Duration::from_secs(4), 4.0),
+/// ];
+///
+/// let mut aggregator = BasicAggregator::new(decay);
+///
+/// for item in stream {
+///     aggregator.update(item);
+/// }
+///
+/// let epsilon = 0.01;
+///
+/// assert_eq!(aggregator.sum(now), 9.67);
+/// assert_eq!(aggregator.count(now), 1.63);
+/// assert!(aggregator.average() >= (5.93 - epsilon) && aggregator.average() <= (5.93 + epsilon));
+/// ```
+///
+/// ### Update Landmark
+/// ```rust
+/// use std::time::{Duration, Instant};
+/// use fermentation::{aggregate::BasicAggregator, Aggregator, ForwardDecay, g};
+///
+/// let decay = ForwardDecay::new(Instant::now(), g::Exponential::new(0.2));
+/// let landmark = decay.landmark();
+/// let new_landmark = landmark + Duration::from_secs(1);
+/// let now = landmark + Duration::from_secs(10);
+/// let stream = vec![
+///     (landmark + Duration::from_secs(5), 4.0),
+///     (landmark + Duration::from_secs(7), 8.0),
+///     (landmark + Duration::from_secs(3), 3.0),
+///     (landmark + Duration::from_secs(8), 6.0),
+///     (landmark + Duration::from_secs(4), 4.0),
+/// ];
+///
+/// let mut aggregator = BasicAggregator::new(decay);
+/// let mut clone = aggregator.clone();
+///
+/// clone.reset(new_landmark);
+///
+/// for item in stream {
+///     aggregator.update(item);
+///     clone.update(item);
+/// }
+///
+/// aggregator.update_landmark(new_landmark);
+///
+/// let epsilon = 0.0001;
+///
+/// assert!((aggregator.sum(now) - clone.sum(now)).abs() < epsilon);
+/// assert!((aggregator.count(now) - clone.count(now)).abs() < epsilon);
+/// assert!((aggregator.average() - clone.average()).abs() < epsilon);
+/// ```
 #[derive(Copy, Clone)]
 pub struct BasicAggregator<G, I> {
     decay: ForwardDecay<G>,
@@ -63,8 +126,16 @@ where
         self.sum / self.decay.normalizing_factor(timestamp)
     }
 
+    pub fn static_sum(&self) -> f64 {
+        self.sum
+    }
+
     pub fn count(&self, timestamp: Instant) -> f64 {
         self.count / self.decay.normalizing_factor(timestamp)
+    }
+
+    pub fn static_count(&self) -> f64 {
+        self.count
     }
 
     pub fn average(&self) -> f64 {
@@ -105,7 +176,9 @@ mod tests {
         let epsilon = 0.01;
 
         assert_eq!(aggregator.sum(now), 9.67);
+        assert_eq!(aggregator.static_sum(), 967.0);
         assert_eq!(aggregator.count(now), 1.63);
+        assert_eq!(aggregator.static_count(), 163.0);
         assert!(aggregator.average() >= (5.93 - epsilon) && aggregator.average() <= (5.93 + epsilon));
     }
 }

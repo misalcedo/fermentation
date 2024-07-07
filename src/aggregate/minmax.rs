@@ -30,10 +30,38 @@ impl<I> MinMax<I> {
     }
 }
 
-/// A decay function in either the forward or backward setting assigns a weight to each item in the
-/// input (and the value of this weight can vary over time).
-/// Aggregate computations over such data must now use these weights to scale the contribution
-/// of each item. In most cases, this leads to a natural weighted generalization of the aggregate.
+/// An aggregation computation over a stream of items to determine the decayed min and max.
+///
+/// ## Example
+/// ```rust
+/// use std::time::{Duration, Instant};
+/// use fermentation::{aggregate::MinMaxAggregator, Aggregator, ForwardDecay, g};
+///
+/// let decay = ForwardDecay::new(Instant::now(), g::Polynomial::new(2));
+/// let landmark = decay.landmark();
+/// let now = landmark + Duration::from_secs(10);
+/// let stream = vec![
+///     (landmark + Duration::from_secs(5), 4.0),
+///     (landmark + Duration::from_secs(7), 8.0),
+///     (landmark + Duration::from_secs(3), 3.0),
+///     (landmark + Duration::from_secs(8), 6.0),
+///     (landmark + Duration::from_secs(4), 4.0),
+/// ];
+///
+/// let mut aggregator = MinMaxAggregator::new(decay);
+///
+/// for item in stream {
+///     aggregator.update(item);
+/// }
+///
+/// assert_eq!(aggregator.min(), Some(&(landmark + Duration::from_secs(3), 3.0)));
+/// assert_eq!(aggregator.max(), Some(&(landmark + Duration::from_secs(7), 8.0)));
+///
+/// aggregator.reset(landmark);
+///
+/// assert_eq!(aggregator.min(), None);
+/// assert_eq!(aggregator.max(), None);
+/// ```
 pub struct MinMaxAggregator<G, I> {
     decay: ForwardDecay<G>,
     min_max: MinMax<I>,
