@@ -7,8 +7,8 @@ pub mod aggregate;
 pub mod g;
 mod item;
 
-pub use aggregate::Aggregator;
 pub use item::Item;
+
 use crate::g::Function;
 
 /// A decay function takes some information about the ith item, and returns a weight for this item.
