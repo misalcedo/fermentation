@@ -10,10 +10,18 @@ impl Function for () {
     }
 }
 
+/// • Exponential decay: g(n) = exp(α * n) for parameter α > 0.
+#[derive(Copy, Clone)]
 pub struct Exponential(f64);
 
 impl Exponential {
+    /// ## Panic
+    /// Panics when alpha is not greater than 0.
     pub fn new(alpha: f64) -> Self {
+        if !(alpha > 0.0) {
+            panic!("alpha must be greater than 0, given {alpha}");
+        }
+
         Self(alpha)
     }
 }
@@ -24,10 +32,18 @@ impl Function for Exponential {
     }
 }
 
+/// Polynomial decay: g(n) = n ^ β for some parameter β > 0.
+#[derive(Copy, Clone)]
 pub struct Polynomial(i32);
 
 impl Polynomial {
+    /// ## Panic
+    /// Panics when beta is not greater than 0.
     pub fn new(beta: i32) -> Self {
+        if !(beta > 0) {
+            panic!("beta must be greater than 0, given {beta}");
+        }
+
         Self(beta)
     }
 }
@@ -38,6 +54,8 @@ impl Function for Polynomial {
     }
 }
 
+/// Landmark Window: g(n) = 1 for n > 0, and 0 otherwise.
+#[derive(Copy, Clone)]
 pub struct LandmarkWindow;
 
 impl Function for LandmarkWindow {
@@ -50,6 +68,7 @@ impl Function for LandmarkWindow {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct Custom<F>(F);
 
 impl<F> From<F> for Custom<F> where F: Fn(f64) -> f64 {
@@ -87,8 +106,32 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
+    fn negative_exponential() {
+        Exponential::new(-1.0);
+    }
+
+    #[test]
+    #[should_panic]
+    fn zero_exponential() {
+        Exponential::new(0.0);
+    }
+
+    #[test]
     fn polynomial() {
         assert_eq!(Polynomial::new(3).invoke(2.0), 8.0);
+    }
+
+    #[test]
+    #[should_panic]
+    fn negative_polynomial() {
+        Polynomial::new(-3);
+    }
+
+    #[test]
+    #[should_panic]
+    fn zero_polynomial() {
+        Polynomial::new(0);
     }
 
     #[test]

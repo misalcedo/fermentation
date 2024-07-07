@@ -3,11 +3,11 @@
 
 use std::time::Instant;
 
-mod aggregate;
+pub mod aggregate;
 pub mod g;
 mod item;
 
-pub use aggregate::ArithmeticAggregation;
+pub use aggregate::Aggregator;
 pub use item::Item;
 use crate::g::Function;
 
@@ -49,6 +49,139 @@ use crate::g::Function;
 /// (and then use this new L' at query time).
 /// This can be done with a linear
 /// pass over whatever data structure is being used.
+///
+/// ## Examples
+/// ### Basic Aggregation
+/// ```rust
+/// use std::time::{Duration, Instant};
+/// use fermentation::{aggregate::BasicAggregator, Aggregator, ForwardDecay, g};
+///
+/// let decay = ForwardDecay::new(Instant::now(), g::Polynomial::new(2));
+/// let landmark = decay.landmark();
+/// let now = landmark + Duration::from_secs(10);
+/// let stream = vec![
+///     (landmark + Duration::from_secs(5), 4.0),
+///     (landmark + Duration::from_secs(7), 8.0),
+///     (landmark + Duration::from_secs(3), 3.0),
+///     (landmark + Duration::from_secs(8), 6.0),
+///     (landmark + Duration::from_secs(4), 4.0),
+/// ];
+///
+/// let mut aggregator = BasicAggregator::new(decay);
+///
+/// for item in stream {
+///     aggregator.update(item);
+/// }
+///
+/// let epsilon = 0.01;
+///
+/// assert_eq!(aggregator.sum(now), 9.67);
+/// assert_eq!(aggregator.count(now), 1.63);
+/// assert!(aggregator.average() >= (5.93 - epsilon) && aggregator.average() <= (5.93 + epsilon));
+/// ```
+///
+/// ### Update Landmark
+/// ```rust
+/// use std::time::{Duration, Instant};
+/// use fermentation::{aggregate::BasicAggregator, Aggregator, ForwardDecay, g};
+///
+/// let decay = ForwardDecay::new(Instant::now(), g::Exponential::new(0.2));
+/// let landmark = decay.landmark();
+/// let new_landmark = landmark + Duration::from_secs(1);
+/// let now = landmark + Duration::from_secs(10);
+/// let stream = vec![
+///     (landmark + Duration::from_secs(5), 4.0),
+///     (landmark + Duration::from_secs(7), 8.0),
+///     (landmark + Duration::from_secs(3), 3.0),
+///     (landmark + Duration::from_secs(8), 6.0),
+///     (landmark + Duration::from_secs(4), 4.0),
+/// ];
+///
+/// let mut aggregator = BasicAggregator::new(decay);
+/// let mut clone = aggregator.clone();
+///
+/// clone.reset(new_landmark);
+///
+/// for item in stream {
+///     aggregator.update(item);
+///     clone.update(item);
+/// }
+///
+/// aggregator.update_landmark(new_landmark);
+///
+/// let epsilon = 0.0001;
+///
+/// assert!((aggregator.sum(now) - clone.sum(now)).abs() < epsilon);
+/// assert!((aggregator.count(now) - clone.count(now)).abs() < epsilon);
+/// assert!((aggregator.average() - clone.average()).abs() < epsilon);
+/// ```
+///
+/// ### MinMax
+/// ```rust
+/// use std::time::{Duration, Instant};
+/// use fermentation::{aggregate::MinMaxAggregator, Aggregator, ForwardDecay, g};
+///
+/// let decay = ForwardDecay::new(Instant::now(), g::Polynomial::new(2));
+/// let landmark = decay.landmark();
+/// let now = landmark + Duration::from_secs(10);
+/// let stream = vec![
+///     (landmark + Duration::from_secs(5), 4.0),
+///     (landmark + Duration::from_secs(7), 8.0),
+///     (landmark + Duration::from_secs(3), 3.0),
+///     (landmark + Duration::from_secs(8), 6.0),
+///     (landmark + Duration::from_secs(4), 4.0),
+/// ];
+///
+/// let mut aggregator = MinMaxAggregator::new(decay);
+///
+/// for item in stream {
+///     aggregator.update(item);
+/// }
+///
+/// assert_eq!(aggregator.min(), Some(&(landmark + Duration::from_secs(3), 3.0)));
+/// assert_eq!(aggregator.max(), Some(&(landmark + Duration::from_secs(7), 8.0)));
+///
+/// aggregator.reset(landmark);
+///
+/// assert_eq!(aggregator.min(), None);
+/// assert_eq!(aggregator.max(), None);
+/// ```
+///
+/// ### MinMax
+/// ```rust
+/// use std::time::{Duration, Instant};
+/// use fermentation::{aggregate::MinMaxAggregator, Aggregator, ForwardDecay, g};
+///
+/// let landmark = Instant::now();
+/// let now = landmark + Duration::from_secs(10);
+/// let stream = vec![
+///     (landmark + Duration::from_secs(5), 4.0),
+///     (landmark + Duration::from_secs(7), 8.0),
+///     (landmark + Duration::from_secs(3), 3.0),
+///     (landmark + Duration::from_secs(8), 6.0),
+///     (landmark + Duration::from_secs(4), 4.0),
+/// ];
+///
+/// let decay = ForwardDecay::new(landmark, g::Polynomial::new(2));
+///
+/// let mut weights = Vec::with_capacity(stream.len());
+/// let mut decayed_values = Vec::with_capacity(stream.len());
+///
+/// for item in stream {
+///     let weight = decay.weight(&item, now);
+///     let decayed_value = decay.weighted_value(&item, now);
+///
+///     weights.push(weight);
+///     decayed_values.push(decayed_value);
+///
+///     assert_eq!(weight, decay.static_weight(&item) / decay.normalizing_factor(now));
+///     assert_eq!(decayed_value, decay.static_weighted_value(&item) / decay.normalizing_factor(now));
+/// }
+///
+/// assert_eq!(weights, vec![0.25, 0.49, 0.09, 0.64, 0.16]);
+/// assert_eq!(decayed_values, vec![0.25 * 4.0, 0.49 * 8.0, 0.09 * 3.0, 0.64 * 6.0, 0.16 * 4.0]);
+/// ```
+#[derive(Copy, Clone)]
 pub struct ForwardDecay<G> {
     landmark: Instant,
     g: G,
@@ -94,6 +227,14 @@ where
         self.g.invoke(item.age(self.landmark)) / self.g.invoke(timestamp.age(self.landmark))
     }
 
+    /// The value of this item multiplied by its weight.
+    pub fn weighted_value<I>(&self, item: I, timestamp: Instant) -> f64
+    where
+        I: Item,
+    {
+        self.weight(&item, timestamp) * item.value()
+    }
+
     /// The weight of an item without the normalizing factor of 1 / g(t - L).
     /// Has the property of remaining constant for a given item when the landmark remains constant.
     pub fn static_weight<I>(&self, item: I) -> f64
@@ -118,13 +259,6 @@ where
     pub fn normalizing_factor(&self, timestamp: Instant) -> f64
     {
         self.g.invoke(timestamp.age(self.landmark))
-    }
-
-    pub fn aggregate<I>(self) -> ArithmeticAggregation<G, I>
-    where
-        I: Item,
-    {
-        ArithmeticAggregation::<G, I>::new(self)
     }
 }
 
