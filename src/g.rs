@@ -1,3 +1,5 @@
+///! Various implementations of positive monotone non-decreasing functions, used to calculate the decayed weight of an item.
+
 /// A positive monotone non-decreasing function g, used to calculate the decayed weight of an item.
 /// Implementors are responsible for ensuring the range of the function adheres to these requirements.
 pub trait Function {
@@ -10,7 +12,7 @@ impl Function for () {
     }
 }
 
-/// • Exponential decay: g(n) = exp(α * n) for parameter α > 0.
+/// Exponential decay: g(n) = exp(α * n) for parameter α > 0.
 #[derive(Copy, Clone)]
 pub struct Exponential(f64);
 
@@ -68,6 +70,8 @@ impl Function for LandmarkWindow {
     }
 }
 
+/// Wraps any arbitrary struct that implements the [Fn] trait to be used with a forward decay model.
+/// Implementors are responsible for ensuring the range of the function is positive, monotone and non-decreasing.
 #[derive(Copy, Clone)]
 pub struct Custom<F>(F);
 
