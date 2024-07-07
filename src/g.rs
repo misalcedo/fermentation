@@ -1,4 +1,4 @@
-///! Various implementations of positive monotone non-decreasing functions, used to calculate the decayed weight of an item.
+//! Various implementations of positive monotone non-decreasing functions, used to calculate the decayed weight of an item.
 
 /// A positive monotone non-decreasing function g, used to calculate the decayed weight of an item.
 /// Implementors are responsible for ensuring the range of the function adheres to these requirements.
