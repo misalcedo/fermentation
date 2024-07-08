@@ -1,5 +1,7 @@
 //! Various implementations of positive monotone non-decreasing functions, used to calculate the decayed weight of an item.
 
+use std::time::Duration;
+
 /// A positive monotone non-decreasing function g, used to calculate the decayed weight of an item.
 /// Implementors are responsible for ensuring the range of the function adheres to these requirements.
 pub trait Function {
@@ -13,7 +15,7 @@ impl Function for () {
 }
 
 /// Exponential decay: g(n) = exp(α * n) for parameter α > 0.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Exponential(f64);
 
 impl Exponential {
@@ -25,6 +27,27 @@ impl Exponential {
         }
 
         Self(alpha)
+    }
+
+    /// An exponential decay function that decays to the target ratio of the original at the given duration.
+    ///
+    /// ## Panic
+    /// Panics when target is not greater than 0 and less than 1.
+    ///
+    /// ## Example
+    /// ```rust
+    /// use std::time::Duration;
+    /// use fermentation::g::Exponential;
+    ///
+    /// // i.e. an item in the stream will have 0.01% (99.99% decay) of its original value after 60 seconds.
+    /// assert_eq!(Exponential::rate(0.0001, Duration::from_secs(60)), Exponential::new(0.1535056728662697));
+    /// ```
+    pub fn rate(target: f64, duration: Duration) -> Self {
+        if !(target > 0.0 && target < 1.0) {
+            panic!("target must in the range (0, 1), given {target}");
+        }
+
+        Self(-target.ln() / duration.as_secs_f64())
     }
 }
 
@@ -107,6 +130,7 @@ mod tests {
     #[test]
     fn exponential() {
         assert_eq!(Exponential::new(1.0).invoke(1.0), 1.0_f64.exp());
+        assert_eq!(Exponential::rate(0.0001, Duration::from_secs(60)), Exponential::new(0.1535056728662697));
     }
 
     #[test]

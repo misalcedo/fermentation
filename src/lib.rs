@@ -6,6 +6,7 @@ use std::time::Instant;
 pub mod aggregate;
 pub mod g;
 mod item;
+pub mod space_saving;
 
 pub use item::Item;
 
@@ -84,7 +85,7 @@ use crate::g::Function;
 /// assert_eq!(weights, vec![0.25, 0.49, 0.09, 0.64, 0.16]);
 /// assert_eq!(decayed_values, vec![0.25 * 4.0, 0.49 * 8.0, 0.09 * 3.0, 0.64 * 6.0, 0.16 * 4.0]);
 /// ```
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct ForwardDecay<G> {
     landmark: Instant,
     g: G,
