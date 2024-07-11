@@ -23,7 +23,7 @@ fn main() {
     let frequent = ss.frequent(0.1);
     let end = Instant::now();
 
-    println!("Elapse: {}", (end - start).as_secs_f64());
+    println!("Elapsed: {}", (end - start).as_secs_f64());
     println!("Top elements: {:?}", &top);
 
     for (index, e) in top.into_iter().enumerate() {
